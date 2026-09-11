@@ -52,6 +52,9 @@ rosenpass_permissive: false
 env_vars: []
 ```
 
+> **เลือกทางนี้ให้ถูกตั้งแต่แรก** — ใส่ setup key = เครื่องอยู่ในเมชถาวร ·
+> ปล่อยว่างแล้วใช้ SSO login = เครื่องจะหลุดเองใน 24 ชั่วโมง เหตุผลอยู่ที่หัวข้อ A5
+
 กด **SAVE** แล้วไปแท็บ **Info** กด **START**
 
 ### A4. ถ้าไม่ได้ใส่ setup key ต้องกดอนุมัติ
@@ -67,6 +70,34 @@ https://<netbird-server>/oauth2/device?user_code=XXXX-XXXX
 
 3. เปิดลิงก์นั้นในเบราว์เซอร์ แล้วกดอนุมัติภายใน 5 นาที
 4. ถ้าเลยเวลา ให้กด **RESTART** ที่ add-on แล้วอ่าน log เอารหัสใหม่
+
+### A5. ถ้าเลือกทาง SSO เครื่องจะหลุดเองใน 24 ชั่วโมง
+
+peer ที่เข้าเมชด้วย SSO login มีอายุ พอครบกำหนดจะหลุดออกจากเมชเองแล้วรอ login ใหม่
+เครื่องที่ไม่มีคนนั่งอยู่หน้าจออย่าง HAOS ในตู้ จะกลับเข้าเมชเองไม่ได้ ต้องมีคนไปกดอนุมัติให้
+
+เงื่อนไขการหมดอายุมีสามชั้น ต้องครบทั้งสามถึงจะเริ่มนับเวลา
+(ยืนยันจากซอร์ส NetBird `management/server/peer/peer.go` ฟังก์ชัน `LoginExpired`)
+
+```text
+1. peer ถูกเพิ่มด้วย SSO         = ฟิลด์ UserID ไม่ว่าง
+                                  peer ที่เข้าด้วย setup key ฟิลด์นี้ว่าง จึงไม่มีวันหมดอายุ
+2. peer เปิด login expiration    ฟิลด์ LoginExpirationEnabled ของ peer
+3. account เปิด login expiration ฟิลด์ PeerLoginExpirationEnabled ของทั้งบัญชี
+```
+
+นาฬิกานับจาก `last_login` ของ peer ไม่ใช่เวลาที่เชื่อมต่อครั้งล่าสุด และค่าเริ่มต้นคือ **24 ชั่วโมง**
+(`DefaultPeerLoginExpiration = 24 * time.Hour` ใน `management/server/types/account.go`)
+
+วิธีแก้ เลือกอย่างใดอย่างหนึ่ง
+
+- **ทางที่ควรเลือก** — ขอ setup key จากคนดูแลเซิร์ฟเวอร์ แล้วตั้งค่า add-on ใหม่โดยใส่ setup key
+  ต้องลบ peer เดิมออกจากแดชบอร์ดก่อน ไม่งั้นชื่อจะชนแล้วถูกต่อท้ายเป็น `<ชื่อ>-1`
+  เพราะ NetBird ใช้ชื่อ peer เป็น DNS label ที่ห้ามซ้ำภายในบัญชีเดียวกัน
+- **ถ้าคุมแดชบอร์ดเองได้** — ปิดหมดอายุเฉพาะเครื่องนี้ ที่หน้า peer เอา login expiration ออก
+  เท่ากับตั้ง `login_expiration_enabled: false` ผ่าน `PUT /api/peers/<peer-id>`
+
+ตรวจว่าเครื่องไหนเข้าข่ายหมดอายุบ้าง ดูที่ `GET /api/peers` ฟิลด์ `user_id` ถ้าไม่ว่างคือเข้าด้วย SSO
 
 ---
 
@@ -234,6 +265,7 @@ Missing option 'env_vars' in root               ส่ง options ไม่ค�
 device code หมดอายุก่อนกด                        อายุแค่ 5 นาที                   restart add-on แล้วอ่านโค้ดใหม่
 no NAT found: context deadline exceeded          เราเตอร์ไม่เปิด UPnP/NAT-PMP     ไม่ต้องแก้ ใช้ relay/STUN แทนได้
 Peers count แสดง 0/N                             lazy connection ยังไม่เปิดทันเนล  ping ทดสอบ ถ้าผ่านคือปกติ
+peer หลุดจากเมชเองหลังผ่านไปหนึ่งวัน              เข้าเมชด้วย SSO ไม่ใช่ setup key   ใช้ setup key หรือปิด login expiration
 ```
 
 ---
